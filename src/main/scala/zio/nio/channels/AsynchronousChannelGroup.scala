@@ -1,24 +1,27 @@
 package zio.nio.channels
 
 import java.io.IOException
-import java.nio.channels.{ AsynchronousChannelGroup => JAsynchronousChannelGroup }
-import java.nio.channels.spi.{ AsynchronousChannelProvider => JAsynchronousChannelProvider }
-
-import java.util.concurrent.{ ExecutorService => JExecutorService, ThreadFactory => JThreadFactory }
+import java.nio.channels.{AsynchronousChannelGroup => JAsynchronousChannelGroup}
+import java.nio.channels.spi.{AsynchronousChannelProvider => JAsynchronousChannelProvider}
+import java.util.concurrent.{ThreadFactory => JThreadFactory}
 import java.util.concurrent.TimeUnit
 
-import zio.{ IO, UIO }
+import zio.{IO, NioExecutorService, UIO, ZIO}
 import zio.duration.Duration
 
 object AsynchronousChannelGroup {
 
-  def apply(executor: JExecutorService, initialSize: Int): IO[Exception, AsynchronousChannelGroup] =
-    IO.effect(
+  def apply(initialSize: Int): ZIO[NioExecutorService, Exception, AsynchronousChannelGroup] =
+    for {
+      executor <- ZIO.environment[NioExecutorService].map(_.nioService.executorService)
+      channelGroup <- IO.effect(
         new AsynchronousChannelGroup(
           JAsynchronousChannelGroup.withCachedThreadPool(executor, initialSize)
         )
       )
-      .refineToOrDie[Exception]
+        .refineToOrDie[Exception]
+    } yield channelGroup
+
 
   def apply(
     threadsNo: Int,
@@ -31,11 +34,14 @@ object AsynchronousChannelGroup {
       )
       .refineToOrDie[Exception]
 
-  def apply(executor: JExecutorService): IO[Exception, AsynchronousChannelGroup] =
-    IO.effect(
+  def apply(): ZIO[NioExecutorService, Exception, AsynchronousChannelGroup] =
+    for {
+      executor <- ZIO.environment[NioExecutorService].map(_.nioService.executorService)
+      channelGroup <- IO.effect(
         new AsynchronousChannelGroup(JAsynchronousChannelGroup.withThreadPool(executor))
-      )
-      .refineToOrDie[Exception]
+      ).refineToOrDie[Exception]
+    } yield channelGroup
+
 }
 
 class AsynchronousChannelGroup(private[channels] val channelGroup: JAsynchronousChannelGroup) {
